@@ -46,28 +46,36 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// Preset emojis for comment box
 const COMMENT_EMOJIS = ['😀', '😂', '❤️', '🔥', '🎉', '👏', '🙌', '💯', '✨', '😍'];
 
 export default function App() {
   const [posts, setPosts] = useState([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+  
+  // Check if admin mode is enabled via URL parameter ?admin=true
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isPresenterView, setIsPresenterView] = useState(false);
+
   const [floatingEmojis, setFloatingEmojis] = useState([]);
   
-  // Active selected post for IG-style detail popup modal
   const [selectedPost, setSelectedPost] = useState(null);
   const [commentText, setCommentText] = useState('');
   const [commentAuthor, setCommentAuthor] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
-  // Sorting filter state: 'latest', 'likes', 'comments'
   const [sortBy, setSortBy] = useState('latest');
-
-  // New Post Form State
   const [caption, setCaption] = useState('');
   const [mediaData, setMediaData] = useState(''); 
+
+  // Detect Admin URL parameter on load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('admin') === 'true') {
+      setIsAdmin(true);
+      setIsPresenterView(true);
+    }
+  }, []);
 
   // Real-time listener for posts
   useEffect(() => {
@@ -81,7 +89,6 @@ export default function App() {
       }));
       setPosts(postsData);
       
-      // Keep selectedPost updated live if modal is open
       setSelectedPost(current => {
         if (!current) return null;
         return postsData.find(p => p.id === current.id) || null;
@@ -93,14 +100,15 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Real-time listener for live reactions/emojis
+  // Real-time listener for live reactions/emojis across all connected devices
   useEffect(() => {
     const q = query(collection(db, "boards", "main", "reactions"), orderBy("createdAt", "desc"));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
         if (change.type === "added") {
           const reaction = change.data();
-          if (reaction.createdAt && Date.now() - reaction.createdAt.toMillis() < 5000) {
+          // Trigger animation for reactions created within the last 4 seconds
+          if (reaction.createdAt && Date.now() - reaction.createdAt.toMillis() < 4000) {
             triggerMeetReactionBurst(reaction.emoji, reaction.x || Math.random() * 80 + 10);
           }
         }
@@ -110,17 +118,16 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Google Meet-style animation engine: generates multiple floating particles per tap
   const triggerMeetReactionBurst = (emoji, startX) => {
-    const count = Math.floor(Math.random() * 3) + 3; // 3 to 5 floating particles per click
+    const count = Math.floor(Math.random() * 3) + 3;
     const newItems = [];
 
     for (let i = 0; i < count; i++) {
       const id = Math.random().toString(36).substring(2, 9);
-      const xOffset = (Math.random() - 0.5) * 15; // random horizontal spread
-      const delay = i * 150; // staggered spawn timing
-      const scale = 0.8 + Math.random() * 0.6; // random sizing
-      const rotation = (Math.random() - 0.5) * 40; // random tilt angle
+      const xOffset = (Math.random() - 0.5) * 15;
+      const delay = i * 150;
+      const scale = 0.8 + Math.random() * 0.6;
+      const rotation = (Math.random() - 0.5) * 40;
 
       newItems.push({
         id,
@@ -134,7 +141,6 @@ export default function App() {
 
     setFloatingEmojis(prev => [...prev, ...newItems]);
 
-    // Clean up after animation finishes (3.5s)
     setTimeout(() => {
       const idsToRemove = newItems.map(item => item.id);
       setFloatingEmojis(prev => prev.filter(item => !idsToRemove.includes(item.id)));
@@ -143,7 +149,7 @@ export default function App() {
 
   const sendReaction = async (emoji) => {
     const x = Math.floor(Math.random() * 80) + 10;
-    // Trigger locally instantly for immediate visual responsiveness
+    // Instantly trigger locally on the device that clicked it
     triggerMeetReactionBurst(emoji, x);
     
     try {
@@ -306,12 +312,12 @@ export default function App() {
     }
   });
 
-  const currentUrl = window.location.href;
+  const currentUrl = window.location.href.split('?')[0];
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col relative overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col relative overflow-hidden pb-24">
       
-      {/* Google Meet-Style Live Floating Reaction Animation Canvas */}
+      {/* Floating Reaction Animation Canvas */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden z-50">
         {floatingEmojis.map(item => (
           <div 
@@ -328,147 +334,145 @@ export default function App() {
         ))}
       </div>
 
-      {/* Header Bar */}
-      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 px-6 py-4 flex items-center justify-between shadow-lg">
-        <div className="flex items-center space-x-3">
-          <div className="bg-gradient-to-tr from-indigo-600 to-pink-600 p-2.5 rounded-2xl text-white shadow-lg shadow-indigo-500/30">
-            <Sparkles className="w-6 h-6 animate-pulse" />
+      {/* Header Bar - Clean responsive layout */}
+      <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-40 px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-lg">
+        <div className="flex items-center space-x-2.5">
+          <div className="bg-gradient-to-tr from-indigo-600 to-pink-600 p-2 rounded-xl text-white shadow-lg shadow-indigo-500/30">
+            <Sparkles className="w-5 h-5 animate-pulse" />
           </div>
           <div>
-            <h1 className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">
-              Live Interactive Wall
+            <h1 className="text-base sm:text-lg font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-300 to-pink-400 bg-clip-text text-transparent">
+              Live Wall
             </h1>
-            <p className="text-xs text-slate-400 flex items-center space-x-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-              <span>Real-time sync active</span>
+            <p className="text-[10px] text-slate-400 flex items-center space-x-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+              <span>Synced</span>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
           <button 
             onClick={() => setIsQRModalOpen(true)}
-            className="flex items-center space-x-2 bg-slate-800 hover:bg-slate-700 px-4 py-2 rounded-xl text-sm font-medium transition border border-slate-700 cursor-pointer"
+            className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 px-3 py-2 rounded-xl text-xs font-medium transition border border-slate-700 cursor-pointer"
           >
-            <QrCode className="w-4 h-4 text-indigo-400" />
-            <span>Scan QR</span>
+            <QrCode className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Scan QR</span>
           </button>
 
-          <button 
-            onClick={() => setIsPresenterView(!isPresenterView)}
-            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-medium transition border cursor-pointer ${
-              isPresenterView 
-                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 border-indigo-400 text-white shadow-lg shadow-indigo-600/40 animate-pulse' 
-                : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-slate-200'
-            }`}
-          >
-            <Presentation className="w-4 h-4 text-pink-400" />
-            <span>{isPresenterView ? 'Presenter Mode ON' : 'Presenter View'}</span>
-          </button>
-
-          {!isPresenterView && (
+          {/* Presenter Mode Button: Visible ONLY if Admin URL parameter is active */}
+          {isAdmin && (
             <button 
-              onClick={() => setIsAddModalOpen(true)}
-              className="flex items-center space-x-2 bg-gradient-to-r from-indigo-500 to-pink-500 hover:from-indigo-600 hover:to-pink-600 px-4 py-2 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-500/20 transition cursor-pointer"
+              onClick={() => setIsPresenterView(!isPresenterView)}
+              className="flex items-center space-x-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 border border-indigo-400 px-3 py-2 rounded-xl text-xs font-medium text-white shadow-lg shadow-indigo-600/40 animate-pulse cursor-pointer"
             >
-              <Plus className="w-4 h-4" />
-              <span>Add Post</span>
+              <Presentation className="w-3.5 h-3.5 text-pink-300" />
+              <span>Stage Mode</span>
             </button>
           )}
+
+          {/* Add Post Button - Always visible beside header controls */}
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center space-x-1.5 bg-gradient-to-r from-indigo-500 to-pink-500 hover:from-indigo-600 hover:to-pink-600 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-lg shadow-indigo-500/20 transition cursor-pointer text-white"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Add Post</span>
+          </button>
         </div>
       </header>
 
-      {/* Presenter Mode Interactive Banner */}
-      {isPresenterView && (
-        <div className="bg-gradient-to-r from-indigo-900/50 via-purple-900/50 to-pink-900/50 border-b border-indigo-500/30 px-8 py-4 flex flex-wrap items-center justify-between gap-4 backdrop-blur-md">
-          <div className="flex items-center space-x-4">
-            <div className="p-3 bg-indigo-500/20 rounded-2xl border border-indigo-500/30 text-indigo-300">
-              <Activity className="w-6 h-6" />
+      {/* Presenter Mode Interactive Banner (Admin Only) */}
+      {isAdmin && isPresenterView && (
+        <div className="bg-gradient-to-r from-indigo-900/50 via-purple-900/50 to-pink-900/50 border-b border-indigo-500/30 px-6 py-3 flex flex-wrap items-center justify-between gap-4 backdrop-blur-md">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 bg-indigo-500/20 rounded-xl border border-indigo-500/30 text-indigo-300">
+              <Activity className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Interactive Stage Mode</h2>
-              <p className="text-xs text-indigo-200">Scan code on screen to participate live • Delete posts or individual comments as host.</p>
+              <h2 className="text-sm font-bold text-white">Admin Stage Mode Active</h2>
+              <p className="text-[11px] text-indigo-200">You can delete inappropriate posts or comments. Participant phones will stream reactions live here.</p>
             </div>
           </div>
 
-          <div className="flex items-center space-x-6 bg-slate-950/60 px-5 py-2.5 rounded-2xl border border-slate-800">
+          <div className="flex items-center space-x-4 bg-slate-950/60 px-4 py-2 rounded-xl border border-slate-800">
             <div className="text-center">
-              <span className="block text-xl font-extrabold text-indigo-400">{posts.length}</span>
-              <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">Total Posts</span>
+              <span className="block text-lg font-extrabold text-indigo-400">{posts.length}</span>
+              <span className="text-[9px] uppercase tracking-wider text-slate-400 font-semibold">Posts</span>
             </div>
-            <div className="h-8 w-[1px] bg-slate-800"></div>
-            <div className="bg-white p-2 rounded-xl shadow-md">
-              <QRCodeSVG value={currentUrl} size={48} />
+            <div className="h-6 w-[1px] bg-slate-800"></div>
+            <div className="bg-white p-1.5 rounded-lg shadow-md">
+              <QRCodeSVG value={currentUrl} size={40} />
             </div>
           </div>
         </div>
       )}
 
       {/* Sort & Filter Bar */}
-      <div className="max-w-7xl mx-auto w-full px-6 pt-6 flex items-center justify-between flex-wrap gap-4">
-        <h2 className="text-lg font-bold text-slate-200">Live Community Board</h2>
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 pt-5 flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-base font-bold text-slate-200">Community Feed</h2>
         
-        <div className="flex items-center space-x-2 bg-slate-900/90 border border-slate-800 p-1 rounded-2xl">
+        <div className="flex items-center space-x-1.5 bg-slate-900/90 border border-slate-800 p-1 rounded-xl">
           <button
             onClick={() => setSortBy('latest')}
-            className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+            className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               sortBy === 'latest' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Clock className="w-3.5 h-3.5" />
+            <Clock className="w-3 h-3" />
             <span>Latest</span>
           </button>
           
           <button
             onClick={() => setSortBy('likes')}
-            className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+            className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               sortBy === 'likes' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            <Flame className="w-3.5 h-3.5 text-rose-400" />
-            <span>Most Liked</span>
+            <Flame className="w-3 h-3 text-rose-400" />
+            <span>Liked</span>
           </button>
 
           <button
             onClick={() => setSortBy('comments')}
-            className={`flex items-center space-x-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+            className={`flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               sortBy === 'comments' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:text-white'
             }`}
           >
-            <TrendingUp className="w-3.5 h-3.5 text-pink-400" />
-            <span>Most Commented</span>
+            <TrendingUp className="w-3 h-3 text-pink-400" />
+            <span>Commented</span>
           </button>
         </div>
       </div>
 
       {/* Main Board Content */}
-      <main className="flex-1 p-6 max-w-7xl mx-auto w-full flex flex-col">
+      <main className="flex-1 p-4 sm:p-6 max-w-7xl mx-auto w-full flex flex-col">
         {posts.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center py-20 px-4">
             <div className="bg-slate-900/90 border border-slate-800 p-8 rounded-3xl max-w-md w-full shadow-2xl backdrop-blur-md">
               <MessageSquare className="w-12 h-12 text-indigo-400 mx-auto mb-4 opacity-80 animate-bounce" />
               <h3 className="text-lg font-bold mb-2">The Board is Empty</h3>
               <p className="text-sm text-slate-400 mb-6">
-                Be the first contributor! Upload a photo using the button below or scan the QR code.
+                Be the first contributor! Upload a photo using the button above or scan the QR code.
               </p>
               <button 
                 onClick={() => setIsAddModalOpen(true)}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl text-sm font-semibold transition cursor-pointer shadow-lg shadow-indigo-600/30"
+                className="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-xl text-sm font-semibold transition cursor-pointer shadow-lg shadow-indigo-600/30 text-white"
               >
                 Create First Post
               </button>
             </div>
           </div>
         ) : (
-          <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 space-y-6 pb-20">
+          <div className="columns-1 sm:columns-2 lg:columns-3 gap-6 space-y-6 pb-12">
             {sortedPosts.map(post => (
               <div 
                 key={post.id} 
                 onClick={() => setSelectedPost(post)}
                 className="break-inside-avoid bg-slate-900/90 border border-slate-800/80 rounded-3xl overflow-hidden shadow-xl hover:border-indigo-500/50 transition duration-300 flex flex-col group relative cursor-pointer"
               >
-                {/* Delete button in Presenter View */}
-                {isPresenterView && (
+                {/* Delete button: Visible if Admin mode is active */}
+                {isAdmin && (
                   <button 
                     onClick={(e) => handleDeletePost(post.id, e)}
                     className="absolute top-3 right-3 bg-rose-600 hover:bg-rose-500 text-white p-2.5 rounded-full shadow-lg z-10 transition transform hover:scale-110 cursor-pointer"
@@ -498,7 +502,6 @@ export default function App() {
 
                   <div className="flex items-center justify-between pt-3 border-t border-slate-800/60">
                     <div className="flex items-center space-x-4">
-                      {/* Like Button */}
                       <button 
                         onClick={(e) => handleLike(post.id, e)}
                         className="flex items-center space-x-1.5 text-slate-400 hover:text-rose-500 transition group/btn cursor-pointer"
@@ -507,7 +510,6 @@ export default function App() {
                         <span className="text-xs font-semibold">{post.likes || 0}</span>
                       </button>
 
-                      {/* Comment Count */}
                       <div className="flex items-center space-x-1.5 text-slate-400">
                         <MessageCircle className="w-4 h-4 text-pink-400" />
                         <span className="text-xs font-semibold">{post.comments?.length || 0}</span>
@@ -537,17 +539,13 @@ export default function App() {
               <X className="w-5 h-5" />
             </button>
 
-            {/* Left side: Image Display */}
             {selectedPost.media && (
               <div className="w-full md:w-3/5 bg-slate-950 flex items-center justify-center max-h-[50vh] md:max-h-[90vh] overflow-hidden">
                 <img src={selectedPost.media} alt="Expanded view" className="max-w-full max-h-full object-contain" />
               </div>
             )}
 
-            {/* Right side: Comments & Interaction */}
             <div className="w-full md:w-2/5 flex flex-col bg-slate-900/90 max-h-[50vh] md:max-h-[90vh]">
-              
-              {/* Header */}
               <div className="p-5 border-b border-slate-800 flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                   <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-indigo-500 to-pink-500 flex items-center justify-center font-bold text-white text-sm shadow-md">
@@ -562,7 +560,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Scrollable Comments Feed */}
               <div className="flex-1 p-5 overflow-y-auto space-y-4">
                 {selectedPost.caption && (
                   <div className="bg-slate-950/50 p-3.5 rounded-2xl border border-slate-800/60">
@@ -583,8 +580,7 @@ export default function App() {
                     selectedPost.comments.map((comm, idx) => (
                       <div key={idx} className="bg-slate-950 p-3 rounded-2xl border border-slate-800 text-xs space-y-1 relative group">
                         
-                        {/* Presenter Mode Comment Deletion Button */}
-                        {isPresenterView && (
+                        {isAdmin && (
                           <button 
                             onClick={() => handleDeleteComment(comm)}
                             className="absolute top-2.5 right-2.5 text-slate-500 hover:text-rose-400 p-1 rounded transition cursor-pointer"
@@ -607,7 +603,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Action Bar & Comment Form */}
               <div className="p-4 border-t border-slate-800 bg-slate-950 space-y-3">
                 <div className="flex items-center justify-between">
                   <button 
@@ -623,9 +618,8 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Emoji Picker Row for Comment Box */}
                 {showEmojiPicker && (
-                  <div className="flex items-center space-x-1.5 p-2 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto scrollbar-none animate-in fade-in zoom-in duration-150">
+                  <div className="flex items-center space-x-1.5 p-2 bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto scrollbar-none">
                     {COMMENT_EMOJIS.map(emoji => (
                       <button
                         key={emoji}
@@ -684,10 +678,10 @@ export default function App() {
         </div>
       )}
 
-      {/* Google Meet-Style Floating Live Emoji Reaction Bar */}
-      <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 px-6 py-3 rounded-full shadow-2xl z-40 flex items-center space-x-4">
-        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider hidden sm:inline">Live React:</span>
-        <div className="flex items-center space-x-3">
+      {/* Floating Live Emoji Reaction Bar (Visible to everyone, triggers global real-time burst) */}
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-slate-900/95 backdrop-blur-xl border border-slate-700/80 px-5 py-2.5 rounded-full shadow-2xl z-40 flex items-center space-x-3">
+        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider hidden sm:inline">React:</span>
+        <div className="flex items-center space-x-2 sm:space-x-3">
           {['❤️', '🔥', '👏', '🎉', '🙌'].map(emoji => (
             <button 
               key={emoji}
@@ -801,7 +795,6 @@ export default function App() {
   );
 }
 
-// Google Meet Float-up Keyframe Animations
 const styleSheet = document.createElement("style");
 styleSheet.type = "text/css";
 styleSheet.innerText = `
